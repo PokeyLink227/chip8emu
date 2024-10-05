@@ -5,6 +5,7 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::keyboard::Scancode;
 use sdl2::pixels::Color;
+use sdl2::rect::Rect;
 use std::time::Duration;
 
 /*
@@ -308,9 +309,10 @@ impl Chip8 {
 pub fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
+    let cell_size = 15;
 
     let window = video_subsystem
-        .window("rust-sdl2 demo: Video", 64, 32)
+        .window("Chip-8 Emulator", 64 * cell_size, 32 * cell_size)
         .position_centered()
         .opengl()
         .build()
@@ -360,7 +362,18 @@ pub fn main() -> Result<(), String> {
             }
         }
 
+        canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
+        // draw emu output
+        canvas.set_draw_color(Color::RGB(255, 255, 255));
+        for (y, row) in emu.pixels.iter().enumerate() {
+            for (x, pixel) in row.iter().enumerate() {
+                if *pixel {
+                    canvas.draw_rect(Rect::new(x as i32, y as i32, cell_size, cell_size))?;
+                }
+            }
+        }
+
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
 
@@ -380,12 +393,6 @@ pub fn main() -> Result<(), String> {
 
         // clock cpu
         let _ = emu.clock();
-
-        if emu.down_keys[0] {
-            canvas.set_draw_color(Color::RGB(255, 0, 0));
-        } else {
-            canvas.set_draw_color(Color::RGB(0, 0, 0));
-        }
     }
 
     Ok(())
