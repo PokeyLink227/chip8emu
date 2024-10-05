@@ -346,6 +346,7 @@ pub fn main() -> Result<(), String> {
     'running: loop {
         // reset pressed keys
         emu.pressed_key = None;
+        let mut pressed = None;
 
         for event in event_pump.poll_iter() {
             match event {
@@ -354,6 +355,7 @@ pub fn main() -> Result<(), String> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::KeyDown { scancode: key, .. } => pressed = key,
                 _ => {}
             }
         }
@@ -363,6 +365,14 @@ pub fn main() -> Result<(), String> {
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
 
         // set pressed key
+        emu.pressed_key = match pressed {
+            None => None,
+            Some(scancode) => match keybinds.iter().position(|x| *x == scancode) {
+                None => None,
+                Some(index) => Some(index as u8),
+            },
+        };
+
         // set keys that are down
         for (index, key) in keybinds.iter().enumerate() {
             emu.down_keys[index] = event_pump.keyboard_state().is_scancode_pressed(*key);
