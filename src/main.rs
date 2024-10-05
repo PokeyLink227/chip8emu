@@ -344,6 +344,8 @@ pub fn main() -> Result<(), String> {
         Scancode::E,
         Scancode::F,
     ];
+    // y, x
+    emu.pixels[2][4] = true;
 
     'running: loop {
         // reset pressed keys
@@ -369,7 +371,12 @@ pub fn main() -> Result<(), String> {
         for (y, row) in emu.pixels.iter().enumerate() {
             for (x, pixel) in row.iter().enumerate() {
                 if *pixel {
-                    canvas.draw_rect(Rect::new(x as i32, y as i32, cell_size, cell_size))?;
+                    canvas.fill_rect(Rect::new(
+                        x as i32 * cell_size as i32,
+                        y as i32 * cell_size as i32,
+                        cell_size,
+                        cell_size,
+                    ))?;
                 }
             }
         }
@@ -397,12 +404,3 @@ pub fn main() -> Result<(), String> {
 
     Ok(())
 }
-/*
-fn main() {
-    let mut emu: Chip8 = Chip8::new();
-
-    println!("{:?}", emu);
-    let _ = emu.clock();
-    println!("{:?}", emu);
-}
-*/
