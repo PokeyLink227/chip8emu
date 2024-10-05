@@ -1,7 +1,9 @@
+#![allow(unused_variables)]
 extern crate sdl2;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
+use sdl2::keyboard::Scancode;
 use sdl2::pixels::Color;
 use std::time::Duration;
 
@@ -58,6 +60,7 @@ enum Chip8Error {
 #[derive(Debug)]
 enum Chip8Mode {
     Running,
+    WaitingKey,
     Stopped,
 }
 
@@ -72,6 +75,9 @@ struct Chip8 {
     sound_timer: u8,
     memory: Vec<u8>,
 
+    pixels: [[bool; 64]; 32],
+    down_keys: [bool; 0x10],
+    pressed_key: Option<u8>,
     mode: Chip8Mode,
 }
 
@@ -86,11 +92,14 @@ impl Chip8 {
             delay_timer: 0,
             sound_timer: 0,
             memory: vec![0; 0x1000],
+            pixels: [[false; 64]; 32],
+            pressed_key: None,
+            down_keys: [false; 0x10],
             mode: Chip8Mode::Stopped,
         }
     }
 
-    fn clock(&mut self) -> Result<(), Chip8Error> {
+    pub fn clock(&mut self) -> Result<(), Chip8Error> {
         let instr = self.fetch_instr();
         self.execute_instr(instr)
     }
@@ -234,12 +243,12 @@ impl Chip8 {
             0xD => self.display_sprite(x, y, imm_4),
             0xE => match imm_8 {
                 0x9E => {
-                    if self.get_key_pressed() == self.v[x] {
+                    if self.get_key_pressed(self.v[x]) {
                         self.pc += 2;
                     }
                 }
                 0xA1 => {
-                    if self.get_key_pressed() != self.v[x] {
+                    if !self.get_key_pressed(self.v[x]) {
                         self.pc += 2;
                     }
                 }
@@ -247,7 +256,10 @@ impl Chip8 {
             },
             0xF => match imm_8 {
                 0x07 => self.v[x] = self.delay_timer,
-                0x0A => self.v[x] = self.get_next_key(),
+                0x0A => match self.get_next_key() {
+                    Some(key) => self.v[x] = key,
+                    None => self.pc -= 2,
+                },
                 0x15 => self.delay_timer = self.v[x],
                 0x18 => self.sound_timer = self.v[x],
                 0x1E => self.i += self.v[x] as u16,
@@ -270,16 +282,22 @@ impl Chip8 {
         Ok(())
     }
 
-    fn clear_screen(&mut self) {}
+    fn clear_screen(&mut self) {
+        for row in &mut self.pixels {
+            for pix in row {
+                *pix = false;
+            }
+        }
+    }
 
     fn display_sprite(&mut self, x: usize, y: usize, ofset: u8) {}
 
-    fn get_key_pressed(&self) -> u8 {
-        0
+    fn get_key_pressed(&self, key: u8) -> bool {
+        self.down_keys[key as usize]
     }
 
-    fn get_next_key(&self) -> u8 {
-        0
+    fn get_next_key(&self) -> Option<u8> {
+        self.pressed_key
     }
 
     fn get_sprite_addr(&self, index: u8) -> u16 {
@@ -300,12 +318,35 @@ pub fn main() -> Result<(), String> {
 
     let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
 
-    canvas.set_draw_color(Color::RGB(255, 0, 0));
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
     canvas.present();
     let mut event_pump = sdl_context.event_pump()?;
 
+    let mut emu = Chip8::new();
+    let keybinds: [Scancode; 0x10] = [
+        Scancode::Num0,
+        Scancode::Num1,
+        Scancode::Num2,
+        Scancode::Num3,
+        Scancode::Num4,
+        Scancode::Num5,
+        Scancode::Num6,
+        Scancode::Num7,
+        Scancode::Num8,
+        Scancode::Num9,
+        Scancode::A,
+        Scancode::B,
+        Scancode::C,
+        Scancode::D,
+        Scancode::E,
+        Scancode::F,
+    ];
+
     'running: loop {
+        // reset pressed keys
+        emu.pressed_key = None;
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -320,7 +361,21 @@ pub fn main() -> Result<(), String> {
         canvas.clear();
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
-        // The rest of the game loop goes here...
+
+        // set pressed key
+        // set keys that are down
+        for (index, key) in keybinds.iter().enumerate() {
+            emu.down_keys[index] = event_pump.keyboard_state().is_scancode_pressed(*key);
+        }
+
+        // clock cpu
+        let _ = emu.clock();
+
+        if emu.down_keys[0] {
+            canvas.set_draw_color(Color::RGB(255, 0, 0));
+        } else {
+            canvas.set_draw_color(Color::RGB(0, 0, 0));
+        }
     }
 
     Ok(())
