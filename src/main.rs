@@ -1,12 +1,8 @@
 #![allow(unused_variables)]
 extern crate sdl2;
 
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::keyboard::Scancode;
-use sdl2::pixels::Color;
-use sdl2::rect::Rect;
-use std::time::Duration;
+use sdl2::{event::Event, keyboard::Keycode, keyboard::Scancode, pixels::Color, rect::Rect};
+use std::{fs::File, io::Read, time::Duration};
 
 /*
 #[derive(Debug)]
@@ -56,6 +52,7 @@ enum Chip8Error {
     StackOverflow,
     StackUnderflow,
     AddressOverflow,
+    BadRomPath,
 }
 
 #[derive(Debug)]
@@ -179,48 +176,50 @@ impl Chip8 {
                     self.v[x] = self.v[y];
                 }
                 0x1 => {
+                    self.v[0xF] = 0x00;
                     self.v[x] |= self.v[y];
                 }
                 0x2 => {
+                    self.v[0xF] = 0x00;
                     self.v[x] &= self.v[y];
                 }
                 0x3 => {
+                    self.v[0xF] = 0x00;
                     self.v[x] ^= self.v[y];
                 }
                 0x4 => {
-                    if self.v[x].checked_add(self.v[y]) == None {
-                        self.v[0xF] = 0x01;
+                    let flag = if self.v[x].checked_add(self.v[y]) == None {
+                        0x01
                     } else {
-                        self.v[0xF] = 0x00;
-                    }
+                        0x00
+                    };
 
                     self.v[x] = self.v[x].wrapping_add(self.v[y]);
+                    self.v[0xF] = flag;
                 }
                 0x5 => {
-                    if self.v[y] > self.v[x] {
-                        self.v[0xF] = 0x00;
-                    } else {
-                        self.v[0xF] = 0x01;
-                    }
+                    let flag = if self.v[y] > self.v[x] { 0x00 } else { 0x01 };
 
                     self.v[x] = self.v[x].wrapping_sub(self.v[y]);
+                    self.v[0xF] = flag;
                 }
                 0x6 => {
-                    self.v[0xF] = self.v[x] & 0x01;
-                    self.v[x] >>= 1;
+                    // chip8 quirk: requires x = y >> 1
+                    let flag = self.v[y] & 0x01;
+                    self.v[x] = self.v[y] >> 1;
+                    self.v[0xF] = flag;
                 }
                 0x7 => {
-                    if self.v[x] > self.v[y] {
-                        self.v[0xF] = 0x00;
-                    } else {
-                        self.v[0xF] = 0x01;
-                    }
+                    let flag = if self.v[x] > self.v[y] { 0x00 } else { 0x01 };
 
                     self.v[x] = self.v[y].wrapping_sub(self.v[x]);
+                    self.v[0xF] = flag;
                 }
                 0xE => {
-                    self.v[0xF] = self.v[x] & 0x80;
-                    self.v[x] <<= 1;
+                    // chip8 quirk: requires x = y << 1
+                    let flag = (self.v[y] & 0x80) >> 7;
+                    self.v[x] = self.v[y] << 1;
+                    self.v[0xF] = flag;
                 }
                 _ => return Err(Chip8Error::InvalidInstruction),
             },
@@ -241,7 +240,7 @@ impl Chip8 {
             0xC => {
                 todo!();
             }
-            0xD => self.display_sprite(x, y, imm_4),
+            0xD => self.display_sprite(self.v[x] as usize, self.v[y] as usize, imm_4),
             0xE => match imm_8 {
                 0x9E => {
                     if self.get_key_pressed(self.v[x]) {
@@ -265,16 +264,37 @@ impl Chip8 {
                 0x18 => self.sound_timer = self.v[x],
                 0x1E => self.i += self.v[x] as u16,
                 0x29 => self.i = self.get_sprite_addr(self.v[x]),
-                0x33 => todo!(),
+                0x33 => {
+                    let hundreds = self.v[x] / 100;
+                    let tens = self.v[x] % 100 / 10;
+                    let ones = self.v[x] % 10;
+                    self.memory[self.i as usize + 0] = hundreds;
+                    self.memory[self.i as usize + 1] = tens;
+                    self.memory[self.i as usize + 2] = ones;
+                }
                 0x55 => {
-                    for offset in 0..x {
+                    for offset in 0..=x {
                         let effective_addr = self.i as usize + offset;
                         if (effective_addr & 0xF000) != 0x0000 {
                             return Err(Chip8Error::AddressOverflow);
                         }
                         self.memory[effective_addr] = self.v[offset];
                     }
+                    // chip8 quirk
+                    self.i += x as u16 + 1;
                 }
+                0x65 => {
+                    for offset in 0..=x {
+                        let effective_addr = self.i as usize + offset;
+                        if (effective_addr & 0xF000) != 0x0000 {
+                            return Err(Chip8Error::AddressOverflow);
+                        }
+                        self.v[offset] = self.memory[effective_addr];
+                    }
+                    // chip8 quirk
+                    self.i += x as u16 + 1;
+                }
+
                 _ => return Err(Chip8Error::InvalidInstruction),
             },
             _ => return Err(Chip8Error::InvalidInstruction),
@@ -291,7 +311,26 @@ impl Chip8 {
         }
     }
 
-    fn display_sprite(&mut self, x: usize, y: usize, ofset: u8) {}
+    fn display_sprite(&mut self, x: usize, y: usize, offset: u8) {
+        let mut collision: u8 = 0;
+        for row in 0..(offset as usize) {
+            if y + row >= 32 {}
+
+            let sprite = self.memory[row + self.i as usize];
+            for bit_index in 0..8 {
+                if x + bit_index >= 64 {}
+
+                if self.pixels[(y + row) % 32][(x + bit_index) % 64]
+                    && (sprite << bit_index) & 0x80 == 0x80
+                {
+                    collision = 1;
+                }
+                self.pixels[(y + row) % 32][(x + bit_index) % 64] ^=
+                    (sprite << bit_index) & 0x80 == 0x80;
+            }
+        }
+        self.v[0xF] = collision;
+    }
 
     fn get_key_pressed(&self, key: u8) -> bool {
         self.down_keys[key as usize]
@@ -302,7 +341,18 @@ impl Chip8 {
     }
 
     fn get_sprite_addr(&self, index: u8) -> u16 {
-        0
+        // each character takes up 5 bytes
+        // character sprites are stored starting at address 0
+        (index as u16) * 5
+    }
+
+    pub fn load_rom(&mut self, filename: &str, address: u16) -> Result<(), Chip8Error> {
+        let mut file = match File::open(filename) {
+            Ok(f) => f,
+            Err(_) => return Err(Chip8Error::BadRomPath),
+        };
+        _ = file.read(&mut self.memory[0x200..]).unwrap();
+        Ok(())
     }
 }
 
@@ -345,12 +395,19 @@ pub fn main() -> Result<(), String> {
         Scancode::F,
     ];
     // y, x
-    emu.pixels[2][4] = true;
+    // emu.pixels[2][4] = true;
+
+    //let _ = emu.load_rom("1-chip8-logo.ch8", 0x200);
+    //let _ = emu.load_rom("2-ibm-logo.ch8", 0x200);
+    //let _ = emu.load_rom("3-corax+.ch8", 0x200);
+    //let _ = emu.load_rom("4-flags.ch8", 0x200);
+    let _ = emu.load_rom("5-quirks.ch8", 0x200);
 
     'running: loop {
         // reset pressed keys
         emu.pressed_key = None;
         let mut pressed = None;
+        let mut step = false;
 
         for event in event_pump.poll_iter() {
             match event {
@@ -359,6 +416,10 @@ pub fn main() -> Result<(), String> {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Space),
+                    ..
+                } => step = true,
                 Event::KeyDown { scancode: key, .. } => pressed = key,
                 _ => {}
             }
@@ -382,7 +443,7 @@ pub fn main() -> Result<(), String> {
         }
 
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
 
         // set pressed key
         emu.pressed_key = match pressed {
@@ -399,7 +460,15 @@ pub fn main() -> Result<(), String> {
         }
 
         // clock cpu
-        let _ = emu.clock();
+        for _ in 0..10 {
+            match emu.clock() {
+                Ok(()) => {}
+                Err(e) => println!("{:?}", e),
+            }
+        }
+
+        emu.delay_timer = emu.delay_timer.saturating_sub(1);
+        emu.sound_timer = emu.sound_timer.saturating_sub(1);
     }
 
     Ok(())
