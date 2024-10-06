@@ -313,12 +313,22 @@ impl Chip8 {
 
     fn display_sprite(&mut self, x: usize, y: usize, offset: u8) {
         let mut collision: u8 = 0;
+        let wrap_h: bool = x >= 64;
+        let wrap_v: bool = y >= 32;
+
+        let x = x % 64;
+        let y = y % 32;
+
         for row in 0..(offset as usize) {
-            if y + row >= 32 {}
+            if y + row >= 32 {
+                break;
+            }
 
             let sprite = self.memory[row + self.i as usize];
             for bit_index in 0..8 {
-                if x + bit_index >= 64 {}
+                if x + bit_index >= 64 {
+                    break;
+                }
 
                 if self.pixels[(y + row) % 32][(x + bit_index) % 64]
                     && (sprite << bit_index) & 0x80 == 0x80
