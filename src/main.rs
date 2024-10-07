@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 extern crate sdl2;
 
+use rand::prelude::*;
 use sdl2::{event::Event, keyboard::Keycode, keyboard::Scancode, pixels::Color, rect::Rect};
 use std::{fs::File, io::Read, time::Duration};
 
@@ -81,7 +82,7 @@ struct Chip8 {
 }
 
 impl Chip8 {
-    fn new() -> Chip8 {
+    pub fn new() -> Chip8 {
         Chip8 {
             v: [0; 0x10],
             pc: 0x200,
@@ -233,15 +234,12 @@ impl Chip8 {
             }
             0xA => self.i = addr,
             // jump reg
-            // TODO: wont overflow but will run out of bounds
             0xB => match addr.checked_add(self.v[0] as u16) {
                 Some(new_addr) => self.pc = new_addr,
                 None => return Err(Chip8Error::AddressOverflow),
             },
             // rand
-            0xC => {
-                todo!();
-            }
+            0xC => self.v[x] = rand::random::<u8>() & imm_8,
             0xD => self.display_sprite(self.v[x] as usize, self.v[y] as usize, imm_4),
             0xE => match imm_8 {
                 0x9E => {
@@ -321,9 +319,6 @@ impl Chip8 {
         self.sprite_drawn = true;
 
         let mut collision: u8 = 0;
-        let wrap_h: bool = x >= 64;
-        let wrap_v: bool = y >= 32;
-
         let x = x % 64;
         let y = y % 32;
 
@@ -373,6 +368,10 @@ impl Chip8 {
         _ = file.read(&mut self.memory[0x200..]).unwrap();
         Ok(())
     }
+
+    pub fn load_font(&mut self, font_data: &[u8]) {
+        self.memory[0..50].copy_from_slice(font_data);
+    }
 }
 
 pub fn main() -> Result<(), String> {
@@ -421,7 +420,21 @@ pub fn main() -> Result<(), String> {
     //let _ = emu.load_rom("3-corax+.ch8", 0x200);
     //let _ = emu.load_rom("4-flags.ch8", 0x200);
     //let _ = emu.load_rom("5-quirks.ch8", 0x200);
-    let _ = emu.load_rom("6-keypad.ch8", 0x200);
+    //let _ = emu.load_rom("6-keypad.ch8", 0x200);
+    let _ = emu.load_rom("Soccer.ch8", 0x200);
+    let font_data: [u8; 50] = [
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x60, 0xA0, 0x20, 0x20, 0xF0, // 1
+        0x60, 0x90, 0x20, 0x40, 0xF0, // 2
+        0xE0, 0x10, 0x60, 0x10, 0xE0, // 3
+        0x90, 0x90, 0x60, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xE0, 0x10, 0xE0, // 5
+        0x70, 0x80, 0xF0, 0x90, 0x60, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x80, // 7
+        0x60, 0x90, 0x60, 0x90, 0x60, // 8
+        0x60, 0x90, 0xF0, 0x10, 0x60, // 9
+    ];
+    emu.load_font(&font_data);
 
     'running: loop {
         // reset pressed keys
@@ -481,7 +494,7 @@ pub fn main() -> Result<(), String> {
 
         // clock cpu
         emu.sprite_drawn = false;
-        for _ in 0..13 {
+        for _ in 0..10 {
             match emu.clock() {
                 Ok(()) => {}
                 Err(e) => println!("{:?}", e),
