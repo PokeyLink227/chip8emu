@@ -354,6 +354,7 @@ impl Chip8 {
         self.down_keys[key as usize]
     }
 
+    // returns the next key pressed and released
     fn get_next_key(&self) -> Option<u8> {
         self.pressed_key
     }
@@ -419,7 +420,8 @@ pub fn main() -> Result<(), String> {
     //let _ = emu.load_rom("2-ibm-logo.ch8", 0x200);
     //let _ = emu.load_rom("3-corax+.ch8", 0x200);
     //let _ = emu.load_rom("4-flags.ch8", 0x200);
-    let _ = emu.load_rom("5-quirks.ch8", 0x200);
+    //let _ = emu.load_rom("5-quirks.ch8", 0x200);
+    let _ = emu.load_rom("6-keypad.ch8", 0x200);
 
     'running: loop {
         // reset pressed keys
@@ -438,7 +440,7 @@ pub fn main() -> Result<(), String> {
                     keycode: Some(Keycode::Space),
                     ..
                 } => step = true,
-                Event::KeyDown { scancode: key, .. } => pressed = key,
+                Event::KeyUp { scancode: key, .. } => pressed = key,
                 _ => {}
             }
         }
@@ -479,7 +481,7 @@ pub fn main() -> Result<(), String> {
 
         // clock cpu
         emu.sprite_drawn = false;
-        for _ in 0..12 {
+        for _ in 0..13 {
             match emu.clock() {
                 Ok(()) => {}
                 Err(e) => println!("{:?}", e),
