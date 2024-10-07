@@ -76,6 +76,7 @@ struct Chip8 {
     pixels: [[bool; 64]; 32],
     down_keys: [bool; 0x10],
     pressed_key: Option<u8>,
+    sprite_drawn: bool,
     mode: Chip8Mode,
 }
 
@@ -93,6 +94,7 @@ impl Chip8 {
             pixels: [[false; 64]; 32],
             pressed_key: None,
             down_keys: [false; 0x10],
+            sprite_drawn: false,
             mode: Chip8Mode::Stopped,
         }
     }
@@ -176,16 +178,16 @@ impl Chip8 {
                     self.v[x] = self.v[y];
                 }
                 0x1 => {
-                    self.v[0xF] = 0x00;
                     self.v[x] |= self.v[y];
+                    self.v[0xF] = 0x00;
                 }
                 0x2 => {
-                    self.v[0xF] = 0x00;
                     self.v[x] &= self.v[y];
+                    self.v[0xF] = 0x00;
                 }
                 0x3 => {
-                    self.v[0xF] = 0x00;
                     self.v[x] ^= self.v[y];
+                    self.v[0xF] = 0x00;
                 }
                 0x4 => {
                     let flag = if self.v[x].checked_add(self.v[y]) == None {
@@ -312,6 +314,12 @@ impl Chip8 {
     }
 
     fn display_sprite(&mut self, x: usize, y: usize, offset: u8) {
+        if self.sprite_drawn {
+            self.pc -= 2;
+            return;
+        }
+        self.sprite_drawn = true;
+
         let mut collision: u8 = 0;
         let wrap_h: bool = x >= 64;
         let wrap_v: bool = y >= 32;
@@ -470,7 +478,8 @@ pub fn main() -> Result<(), String> {
         }
 
         // clock cpu
-        for _ in 0..10 {
+        emu.sprite_drawn = false;
+        for _ in 0..12 {
             match emu.clock() {
                 Ok(()) => {}
                 Err(e) => println!("{:?}", e),
