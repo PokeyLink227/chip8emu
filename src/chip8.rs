@@ -89,15 +89,15 @@ impl Chip8 {
     }
 
     fn fetch_instr(&mut self) -> Result<u16, Chip8Error> {
+        if self.pc & 0xF000 != 0x0000 {
+            return Err(Chip8Error::AddressOverflow);
+        }
+
         let instr: u16 = (self.memory[self.pc as usize] as u16) << 8
             | (self.memory[(self.pc + 1) as usize] as u16);
-        self.pc += 2;
 
-        if self.pc >= 0x1000 {
-            Err(Chip8Error::AddressOverflow)
-        } else {
-            Ok(instr)
-        }
+        self.pc += 2;
+        Ok(instr)
     }
 
     fn execute_instr(&mut self, instr: u16) -> Result<(), Chip8Error> {
@@ -110,7 +110,6 @@ impl Chip8 {
 
         match opcode {
             0x0 => match imm_8 {
-                // syscall
                 0xE0 => self.clear_screen(),
                 // return
                 0xEE => {
@@ -226,7 +225,7 @@ impl Chip8 {
             // jump reg
             0xB => {
                 self.pc += addr + self.v[0] as u16;
-                if self.pc >= 0x1000 {
+                if self.pc & 0xF000 != 0x0000 {
                     return Err(Chip8Error::AddressOverflow);
                 }
             }
@@ -257,7 +256,7 @@ impl Chip8 {
                 },
                 0x15 => self.delay_timer = self.v[x],
                 0x18 => self.sound_timer = self.v[x],
-                0x1E => self.i += self.v[x] as u16,
+                0x1E => self.i = self.i.wrapping_add(self.v[x] as u16),
                 0x29 => self.i = self.get_sprite_addr(self.v[x]),
                 0x33 => {
                     if (self.i + 2) & 0xF000 != 0x0000 {
