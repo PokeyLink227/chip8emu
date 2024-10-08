@@ -1,23 +1,23 @@
 use rand::random;
 use std::{fs::File, io::Read};
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Chip8Error {
     InvalidInstruction,
     StackOverflow,
     StackUnderflow,
     AddressOverflow,
     BadRomPath,
+    IOError,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Chip8Mode {
     Running,
     WaitingKey,
     Stopped,
 }
 
-#[derive(Debug)]
 pub struct Chip8 {
     v: [u8; 0x10],
     pc: u16,
@@ -64,8 +64,10 @@ impl Chip8 {
             Ok(f) => f,
             Err(_) => return Err(Chip8Error::BadRomPath),
         };
-        _ = file.read(&mut self.memory[0x200..]).unwrap();
-        Ok(())
+        match file.read(&mut self.memory[0x200..]) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(Chip8Error::IOError),
+        }
     }
 
     pub fn load_font(&mut self, font_data: &[u8; 50]) {
