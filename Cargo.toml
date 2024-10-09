@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 sdl2 = "0.37.0"
 rand = "0.8.5"
+clap = { version = "4.5.20", features = ["derive"] }
+regex = "1.11.0"
