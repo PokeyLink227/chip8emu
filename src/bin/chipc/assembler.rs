@@ -273,6 +273,14 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
 
 fn parse(ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
     let instr_list: Vec<Instr> = Vec::new();
+    let mut ast = ast.iter().peekable();
+
+    while ast.peek().is_some() {
+        match ast.next() {
+            _ => {}
+        }
+    }
+
     Ok(instr_list)
 }
 
@@ -298,23 +306,3 @@ pub fn assemble(source: &str) -> Result<Vec<u8>, CompileError> {
 
     compile(&isa)
 }
-/*
-let r_clr = Regex::new(r"^clear$").unwrap();
-let r_ret = Regex::new(r"^ret$").unwrap();
-let r_j = Regex::new(r"^jump (?<imm>[0-9]+)$").unwrap();
-let r_mov = Regex::new(r"^mov\s+v(?<regdest>[0-9]{1,2}),\s+(?<imm>[0-9]+)$").unwrap();
-
-let mut ast: Vec<Instr> = Vec::new();
-
-for (line_number, line) in source.lines().enumerate() {
-    if let Some(caps) = r_mov.captures(line) {
-        let register = caps["regdest"].parse::<u8>().unwrap();
-        let imm = caps["imm"].parse::<u8>().unwrap();
-        ast.push(SetImm(register, imm));
-    } else {
-        return Err(ParseError::UnknownInstruction);
-    }
-}
-
-Ok(ast)
-*/
