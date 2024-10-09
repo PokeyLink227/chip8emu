@@ -1,4 +1,3 @@
-use crate::assembler::Instr::*;
 use regex::Regex;
 
 #[derive(Debug)]
@@ -72,6 +71,7 @@ enum Token {
     Value(u16),
     Comment,
     Comma,
+    EndLine,
 }
 
 fn parse_hex(input: &str) -> Result<u16, LexError> {
@@ -97,6 +97,8 @@ pub enum LexError {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ParseError {
     UnknownInstruction,
+    NotARegister,
+    ImmediateTooWide,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -140,20 +142,29 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
 
     let mut tokens: Vec<Token> = Vec::new();
 
-    'nextline: for (line_number, mut line) in source.lines().enumerate() {
+    for (line_number, mut line) in source.lines().enumerate() {
         while !line.is_empty() {
             if r_val.is_match(line) {
                 let caps = r_val.captures(line).unwrap();
                 let val: u16;
                 if let Some(dec) = caps.name("dec") {
                     match dec.as_str().parse::<u16>() {
-                        Ok(num) => val = num,
+                        Ok(num) => {
+                            if num & 0xF000 != 0x0000 {
+                                return Err(LexError::NumberTooWide);
+                            }
+                            val = num;
+                        }
                         Err(_) => return Err(LexError::NumberTooWide),
                     }
                     tokens.push(Token::Value(val));
                     line = &line[dec.len()..];
                 } else if let Some(hex) = caps.name("hex") {
                     val = parse_hex(&hex.as_str()[2..])?;
+                    if val & 0xF000 != 0x0000 {
+                        return Err(LexError::NumberTooWide);
+                    }
+
                     tokens.push(Token::Value(val));
                     line = &line[hex.len()..];
                 } else {
@@ -164,7 +175,12 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 let val: u8;
                 if let Some(dec) = caps.name("dec") {
                     match dec.as_str().parse::<u8>() {
-                        Ok(num) => val = num,
+                        Ok(num) => {
+                            if num & 0xF0 != 0x00 {
+                                return Err(LexError::NumberTooWide);
+                            }
+                            val = num;
+                        }
                         Err(_) => return Err(LexError::NumberTooWide),
                     }
                     tokens.push(Token::Register(val));
@@ -258,7 +274,7 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 tokens.push(Token::Comma);
                 line = &line[1..];
             } else if r_comment.is_match(line) {
-                continue 'nextline;
+                break;
             } else if r_whitespace.is_match(line) {
                 // make skip by number of ws characters found
                 line = &line[1..];
@@ -266,27 +282,61 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 return Err(LexError::IllegalToken);
             }
         }
+        tokens.push(Token::EndLine);
     }
 
     Ok(tokens)
 }
 
-fn parse(ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
-    let instr_list: Vec<Instr> = Vec::new();
-    let mut ast = ast.iter().peekable();
+fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
+    let mut instr_list: Vec<Instr> = Vec::new();
 
-    while ast.peek().is_some() {
-        match ast.next() {
-            _ => {}
+    while !ast.is_empty() {
+        match ast {
+            [Token::Clear, Token::EndLine, ..] => {
+                instr_list.push(Instr::ClearScreen);
+                ast = &ast[2..];
+            }
+            [Token::Return, Token::EndLine, ..] => {
+                instr_list.push(Instr::Return);
+                ast = &ast[2..];
+            }
+            [Token::Jump, Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::Jump(*v));
+                ast = &ast[3..];
+            }
+            [Token::Call, Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::Call(*v));
+                ast = &ast[3..];
+            }
+            [Token::BranchEqual, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::IfEqualImm(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            _ => todo!(),
         }
     }
 
     Ok(instr_list)
 }
 
-fn compile(isa: &[Instr]) -> Result<Vec<u8>, CompileError> {
-    let bin: Vec<u8> = Vec::new();
-    Ok(bin)
+fn compile(isa: &[Instr]) -> Vec<u8> {
+    let bin: Vec<u8> = isa
+        .iter()
+        .map(|instr| match instr {
+            Instr::Jump(v) => {
+                let hi = 0x10 | (v >> 8) as u8 & 0x0F;
+                let lo = (v & 0x00FF) as u8;
+                [hi, lo]
+            }
+            Instr::Return => [0x00, 0xEE],
+            Instr::ClearScreen => [0x00, 0xE0],
+            _ => [0x00, 0x00],
+        })
+        .flatten()
+        .collect();
+
+    bin
 }
 
 pub fn assemble(source: &str) -> Result<Vec<u8>, CompileError> {
@@ -304,5 +354,5 @@ pub fn assemble(source: &str) -> Result<Vec<u8>, CompileError> {
     };
     println!("isa: {:?}", isa);
 
-    compile(&isa)
+    Ok(compile(&isa))
 }

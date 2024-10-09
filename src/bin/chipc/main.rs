@@ -3,7 +3,8 @@ use crate::assembler::assemble;
 mod assembler;
 
 fn main() {
-    let prog = "v0 v155";
-    let _ = assemble(prog);
+    let prog = "j 899";
+    let bin = assemble(prog);
+    println!("{:?}", bin);
     //println!("compiled! :D");
 }
