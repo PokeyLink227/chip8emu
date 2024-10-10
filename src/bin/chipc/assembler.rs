@@ -48,11 +48,14 @@ enum Token {
     BranchEqual,
     BranchNotEqual,
     Move,
+    MoveI,
     Add,
     Or,
     And,
+    AddI,
     Xor,
     Sub,
+    SubRegNeg,
     ShiftRight,
     ShiftLeft,
     JumpReg,
@@ -60,6 +63,7 @@ enum Token {
     Draw,
     BranchKeyDown,
     BranchKeyUp,
+    GetKey,
     GetTimer,
     SetTimer,
     SetSound,
@@ -108,32 +112,36 @@ pub enum CompileError {
 }
 
 fn lex(source: &str) -> Result<Vec<Token>, LexError> {
-    let r_clr = Regex::new(r"^clr").unwrap();
-    let r_ret = Regex::new(r"^ret").unwrap();
-    let r_j = Regex::new(r"^j").unwrap();
-    let r_call = Regex::new(r"^call").unwrap();
-    let r_be = Regex::new(r"^be").unwrap();
-    let r_bne = Regex::new(r"^bne").unwrap();
-    let r_mov = Regex::new(r"^mov").unwrap();
-    let r_add = Regex::new(r"^add").unwrap();
-    let r_sub = Regex::new(r"^sub").unwrap();
-    let r_and = Regex::new(r"^and").unwrap();
-    let r_or = Regex::new(r"^or").unwrap();
-    let r_xor = Regex::new(r"^xor").unwrap();
-    let r_sr = Regex::new(r"^sr").unwrap();
-    let r_sl = Regex::new(r"^sl").unwrap();
-    let r_jr = Regex::new(r"^jr").unwrap();
-    let r_rand = Regex::new(r"^rand").unwrap();
-    let r_draw = Regex::new(r"^draw").unwrap();
-    let r_bkd = Regex::new(r"^bkd").unwrap();
-    let r_bku = Regex::new(r"^bku").unwrap();
-    let r_gdt = Regex::new(r"^gdt").unwrap();
-    let r_sdt = Regex::new(r"^sdt").unwrap();
-    let r_sst = Regex::new(r"^sst").unwrap();
-    let r_gca = Regex::new(r"^gca").unwrap();
-    let r_sbcd = Regex::new(r"^sbcd").unwrap();
-    let r_sb = Regex::new(r"^sb").unwrap();
-    let r_lb = Regex::new(r"^lb").unwrap();
+    let r_clr = Regex::new(r"^clr\s").unwrap();
+    let r_ret = Regex::new(r"^ret\s").unwrap();
+    let r_j = Regex::new(r"^j\s").unwrap();
+    let r_call = Regex::new(r"^call\s").unwrap();
+    let r_be = Regex::new(r"^be\s").unwrap();
+    let r_bne = Regex::new(r"^bne\s").unwrap();
+    let r_mov = Regex::new(r"^mov\s").unwrap();
+    let r_movi = Regex::new(r"^movi\s").unwrap();
+    let r_add = Regex::new(r"^add\s").unwrap();
+    let r_addi = Regex::new(r"^addi\s").unwrap();
+    let r_sub = Regex::new(r"^sub\s").unwrap();
+    let r_subn = Regex::new(r"^subn\s").unwrap();
+    let r_and = Regex::new(r"^and\s").unwrap();
+    let r_or = Regex::new(r"^or\s").unwrap();
+    let r_xor = Regex::new(r"^xor\s").unwrap();
+    let r_sr = Regex::new(r"^sr\s").unwrap();
+    let r_sl = Regex::new(r"^sl\s").unwrap();
+    let r_jr = Regex::new(r"^jr\s").unwrap();
+    let r_rand = Regex::new(r"^rand\s").unwrap();
+    let r_draw = Regex::new(r"^draw\s").unwrap();
+    let r_bkd = Regex::new(r"^bkd\s").unwrap();
+    let r_bku = Regex::new(r"^bku\s").unwrap();
+    let r_gkd = Regex::new(r"^gkd\s").unwrap();
+    let r_gdt = Regex::new(r"^gdt\s").unwrap();
+    let r_sdt = Regex::new(r"^sdt\s").unwrap();
+    let r_sst = Regex::new(r"^sst\s").unwrap();
+    let r_gca = Regex::new(r"^gca\s").unwrap();
+    let r_sbcd = Regex::new(r"^sbcd\s").unwrap();
+    let r_sb = Regex::new(r"^sb\s").unwrap();
+    let r_lb = Regex::new(r"^lb\s").unwrap();
     let r_reg = Regex::new(r"^(V|v)((?<dec>[0-9]{2})|(?<hex>[0-9a-fA-F]))").unwrap();
     let r_val = Regex::new(r"^(?<hex>0x[0-9a-fA-F]+)|^(?<dec>[0-9]+)").unwrap();
     let r_comment = Regex::new(r"^#.?").unwrap();
@@ -192,87 +200,99 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 } else {
                     return Err(LexError::IllegalToken);
                 }
-            } else if r_clr.is_match(line) {
-                tokens.push(Token::Clear);
-                line = &line[3..];
-            } else if r_ret.is_match(line) {
-                tokens.push(Token::Return);
-                line = &line[3..];
-            } else if r_j.is_match(line) {
-                tokens.push(Token::Jump);
-                line = &line[1..];
+            } else if r_rand.is_match(line) {
+                tokens.push(Token::Rand);
+                line = &line[5..];
+            } else if r_draw.is_match(line) {
+                tokens.push(Token::Draw);
+                line = &line[5..];
+            } else if r_sbcd.is_match(line) {
+                tokens.push(Token::StoreBCD);
+                line = &line[5..];
             } else if r_call.is_match(line) {
                 tokens.push(Token::Call);
+                line = &line[5..];
+            } else if r_bkd.is_match(line) {
+                tokens.push(Token::BranchKeyDown);
                 line = &line[4..];
-            } else if r_be.is_match(line) {
-                tokens.push(Token::BranchEqual);
-                line = &line[2..];
+            } else if r_bku.is_match(line) {
+                tokens.push(Token::BranchKeyUp);
+                line = &line[4..];
+            } else if r_gkd.is_match(line) {
+                tokens.push(Token::GetKey);
+                line = &line[4..]
+            } else if r_gdt.is_match(line) {
+                tokens.push(Token::GetTimer);
+                line = &line[4..];
+            } else if r_sdt.is_match(line) {
+                tokens.push(Token::SetTimer);
+                line = &line[4..];
+            } else if r_sst.is_match(line) {
+                tokens.push(Token::SetSound);
+                line = &line[4..];
+            } else if r_gca.is_match(line) {
+                tokens.push(Token::GetCharAddr);
+                line = &line[4..];
+            } else if r_clr.is_match(line) {
+                tokens.push(Token::Clear);
+                line = &line[4..];
+            } else if r_ret.is_match(line) {
+                tokens.push(Token::Return);
+                line = &line[4..];
             } else if r_bne.is_match(line) {
                 tokens.push(Token::BranchNotEqual);
-                line = &line[3..];
+                line = &line[4..];
             } else if r_mov.is_match(line) {
                 tokens.push(Token::Move);
-                line = &line[3..];
+                line = &line[4..];
+            } else if r_movi.is_match(line) {
+                tokens.push(Token::MoveI);
+                line = &line[4..];
+            } else if r_addi.is_match(line) {
+                tokens.push(Token::AddI);
+                line = &line[4..];
             } else if r_add.is_match(line) {
                 tokens.push(Token::Add);
-                line = &line[3..];
+                line = &line[4..];
             } else if r_sub.is_match(line) {
                 tokens.push(Token::Sub);
-                line = &line[3..];
+                line = &line[4..];
+            } else if r_subn.is_match(line) {
+                tokens.push(Token::SubRegNeg);
+                line = &line[4..];
+            } else if r_xor.is_match(line) {
+                tokens.push(Token::Xor);
+                line = &line[4..];
             } else if r_and.is_match(line) {
                 tokens.push(Token::And);
-                line = &line[3..];
+                line = &line[4..];
             } else if r_or.is_match(line) {
-                tokens.push(Token::Xor);
-                line = &line[2..];
-            } else if r_xor.is_match(line) {
-                tokens.push(Token::Sub);
+                tokens.push(Token::Or);
+                line = &line[3..];
+            } else if r_be.is_match(line) {
+                tokens.push(Token::BranchEqual);
                 line = &line[3..];
             } else if r_sr.is_match(line) {
                 tokens.push(Token::ShiftRight);
-                line = &line[2..];
+                line = &line[3..];
             } else if r_sl.is_match(line) {
                 tokens.push(Token::ShiftLeft);
-                line = &line[2..];
+                line = &line[3..];
             } else if r_jr.is_match(line) {
                 tokens.push(Token::JumpReg);
-                line = &line[2..];
-            } else if r_rand.is_match(line) {
-                tokens.push(Token::Rand);
-                line = &line[4..];
-            } else if r_draw.is_match(line) {
-                tokens.push(Token::Draw);
-                line = &line[4..];
-            } else if r_bkd.is_match(line) {
-                tokens.push(Token::BranchKeyDown);
                 line = &line[3..];
-            } else if r_bku.is_match(line) {
-                tokens.push(Token::BranchKeyUp);
-                line = &line[3..];
-            } else if r_gdt.is_match(line) {
-                tokens.push(Token::GetTimer);
-                line = &line[3..];
-            } else if r_sdt.is_match(line) {
-                tokens.push(Token::SetTimer);
-                line = &line[3..];
-            } else if r_sst.is_match(line) {
-                tokens.push(Token::SetSound);
-                line = &line[3..];
-            } else if r_gca.is_match(line) {
-                tokens.push(Token::GetCharAddr);
-                line = &line[3..];
-            } else if r_sbcd.is_match(line) {
-                tokens.push(Token::StoreBCD);
-                line = &line[4..];
             } else if r_sb.is_match(line) {
                 tokens.push(Token::Store);
-                line = &line[2..];
+                line = &line[3..];
             } else if r_lb.is_match(line) {
                 tokens.push(Token::Load);
+                line = &line[3..];
+            } else if r_j.is_match(line) {
+                tokens.push(Token::Jump);
                 line = &line[2..];
             } else if r_comma.is_match(line) {
                 tokens.push(Token::Comma);
-                line = &line[1..];
+                line = &line[2..];
             } else if r_comment.is_match(line) {
                 break;
             } else if r_whitespace.is_match(line) {
@@ -305,6 +325,10 @@ fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
                 instr_list.push(Instr::Jump(*v));
                 ast = &ast[3..];
             }
+            [Token::JumpReg, Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::JumpReg(*v));
+                ast = &ast[3..];
+            }
             [Token::Call, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::Call(*v));
                 ast = &ast[3..];
@@ -312,6 +336,121 @@ fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
             [Token::BranchEqual, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::IfEqualImm(*r1, *v as u8));
                 ast = &ast[4..];
+            }
+            [Token::BranchEqual, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::IfEqualReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::BranchNotEqual, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::IfNotEqualImm(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            [Token::BranchNotEqual, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] =>
+            {
+                instr_list.push(Instr::IfNotEqualReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::Move, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetImm(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            [Token::Move, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::MoveI, Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetI(*v));
+                ast = &ast[4..];
+            }
+            [Token::AddI, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::AddIReg(*r1));
+                ast = &ast[4..];
+            }
+            [Token::Add, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::AddImm(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            [Token::Add, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::AddReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::Sub, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::SubReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::SubRegNeg, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetSubReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::Or, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::OrReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::And, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::AndReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::Xor, Token::Register(r1), Token::Register(r2), Token::EndLine, ..] => {
+                instr_list.push(Instr::XorReg(*r1, *r2 as u8));
+                ast = &ast[4..];
+            }
+            [Token::ShiftLeft, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::ShiftLeft(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            [Token::ShiftRight, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::ShiftRight(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            [Token::Rand, Token::Register(r1), Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::Rand(*r1, *v as u8));
+                ast = &ast[4..];
+            }
+            [Token::Draw, Token::Register(r1), Token::Register(r2), Token::Value(v), Token::EndLine, ..] =>
+            {
+                instr_list.push(Instr::Draw(*r1, *r2, *v as u8));
+                ast = &ast[5..];
+            }
+            [Token::BranchKeyUp, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::IfKey(*r1));
+                ast = &ast[3..];
+            }
+            [Token::BranchKeyDown, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::IfNotKey(*r1));
+                ast = &ast[3..];
+            }
+
+            [Token::GetTimer, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::GetTimer(*r1));
+                ast = &ast[3..];
+            }
+            [Token::SetTimer, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetTimer(*r1));
+                ast = &ast[3..];
+            }
+            [Token::SetSound, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetSound(*r1));
+                ast = &ast[3..];
+            }
+            [Token::GetCharAddr, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::SetICharAddr(*r1));
+                ast = &ast[3..];
+            }
+            [Token::StoreBCD, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::StoreDecimal(*r1));
+                ast = &ast[3..];
+            }
+            [Token::Store, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::StoreReg(*r1));
+                ast = &ast[3..];
+            }
+            [Token::Load, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::LoadReg(*r1));
+                ast = &ast[3..];
+            }
+            [Token::GetKey, Token::Register(r1), Token::EndLine, ..] => {
+                instr_list.push(Instr::GetKey(*r1));
+                ast = &ast[3..];
             }
             _ => todo!(),
         }
