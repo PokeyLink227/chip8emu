@@ -41,6 +41,7 @@ enum Instr {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum Token {
+    SysCall,
     Clear,
     Return,
     Jump,
@@ -73,7 +74,7 @@ enum Token {
     Load,
     Register(u8),
     Value(u16),
-    Comment,
+    //Comment,
     Comma,
     EndLine,
 }
@@ -100,9 +101,7 @@ pub enum LexError {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ParseError {
-    UnknownInstruction,
-    NotARegister,
-    ImmediateTooWide,
+    MalformedInstruction,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -112,6 +111,7 @@ pub enum CompileError {
 }
 
 fn lex(source: &str) -> Result<Vec<Token>, LexError> {
+    let r_sys = Regex::new(r"^sys\s").unwrap();
     let r_clr = Regex::new(r"^clr\s").unwrap();
     let r_ret = Regex::new(r"^ret\s").unwrap();
     let r_j = Regex::new(r"^j\s").unwrap();
@@ -150,7 +150,7 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
 
     let mut tokens: Vec<Token> = Vec::new();
 
-    for (line_number, mut line) in source.lines().enumerate() {
+    for (_line_number, mut line) in source.lines().enumerate() {
         while !line.is_empty() {
             if r_val.is_match(line) {
                 let caps = r_val.captures(line).unwrap();
@@ -212,6 +212,12 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
             } else if r_call.is_match(line) {
                 tokens.push(Token::Call);
                 line = &line[5..];
+            } else if r_subn.is_match(line) {
+                tokens.push(Token::SubRegNeg);
+                line = &line[5..];
+            } else if r_sys.is_match(line) {
+                tokens.push(Token::SysCall);
+                line = &line[4..];
             } else if r_bkd.is_match(line) {
                 tokens.push(Token::BranchKeyDown);
                 line = &line[4..];
@@ -256,9 +262,6 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 line = &line[4..];
             } else if r_sub.is_match(line) {
                 tokens.push(Token::Sub);
-                line = &line[4..];
-            } else if r_subn.is_match(line) {
-                tokens.push(Token::SubRegNeg);
                 line = &line[4..];
             } else if r_xor.is_match(line) {
                 tokens.push(Token::Xor);
@@ -313,6 +316,10 @@ fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
 
     while !ast.is_empty() {
         match ast {
+            [Token::SysCall, Token::Value(v), Token::EndLine, ..] => {
+                instr_list.push(Instr::CallMachineCode(*v));
+                ast = &ast[3..];
+            }
             [Token::Clear, Token::EndLine, ..] => {
                 instr_list.push(Instr::ClearScreen);
                 ast = &ast[2..];
@@ -452,7 +459,8 @@ fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
                 instr_list.push(Instr::GetKey(*r1));
                 ast = &ast[3..];
             }
-            _ => todo!(),
+            [Token::EndLine, ..] => ast = &ast[1..],
+            _ => return Err(ParseError::MalformedInstruction),
         }
     }
 
@@ -463,14 +471,41 @@ fn compile(isa: &[Instr]) -> Vec<u8> {
     let bin: Vec<u8> = isa
         .iter()
         .map(|instr| match instr {
-            Instr::Jump(v) => {
-                let hi = 0x10 | (v >> 8) as u8 & 0x0F;
-                let lo = (v & 0x00FF) as u8;
-                [hi, lo]
-            }
-            Instr::Return => [0x00, 0xEE],
+            Instr::CallMachineCode(v) => [(v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
             Instr::ClearScreen => [0x00, 0xE0],
-            _ => [0x00, 0x00],
+            Instr::Return => [0x00, 0xEE],
+            Instr::Jump(v) => [0x10 | (v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
+            Instr::Call(v) => [0x20 | (v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
+            Instr::IfEqualImm(x, v) => [0x30 | (x & 0x0F), *v as u8],
+            Instr::IfNotEqualImm(x, v) => [0x40 | (x & 0x0F), *v as u8],
+            Instr::IfEqualReg(x, y) => [0x50 | (x & 0x0F), y << 4],
+            Instr::SetImm(x, v) => [0x60 | (x & 0x0F), *v as u8],
+            Instr::AddImm(x, v) => [0x70 | (x & 0x0F), *v as u8],
+            Instr::SetReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x00],
+            Instr::OrReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x01],
+            Instr::AndReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x02],
+            Instr::XorReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x03],
+            Instr::AddReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x04],
+            Instr::SubReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x05],
+            Instr::ShiftRight(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x06],
+            Instr::SetSubReg(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x07],
+            Instr::ShiftLeft(x, y) => [0x80 | (x & 0x0F), (y << 4) | 0x0E],
+            Instr::IfNotEqualReg(x, y) => [0x90 | (x & 0x0F), y << 4],
+            Instr::SetI(v) => [0xA0 | (v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
+            Instr::JumpReg(v) => [0xB0 | (v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
+            Instr::Rand(x, v) => [0xC0 | (x & 0x0F), *v as u8],
+            Instr::Draw(x, y, v) => [0x80 | (x & 0x0F), (y << 4) | (v & 0x000F) as u8],
+            Instr::IfKey(x) => [0xE | (x & 0x0F), 0x9E],
+            Instr::IfNotKey(x) => [0xE | (x & 0x0F), 0xA1],
+            Instr::GetTimer(x) => [0xF0 | (x & 0x0F), 0x07],
+            Instr::GetKey(x) => [0xF0 | (x & 0x0F), 0x0A],
+            Instr::SetTimer(x) => [0xF0 | (x & 0x0F), 0x15],
+            Instr::SetSound(x) => [0xF0 | (x & 0x0F), 0x18],
+            Instr::AddIReg(x) => [0xF0 | (x & 0x0F), 0x1E],
+            Instr::SetICharAddr(x) => [0xF0 | (x & 0x0F), 0x29],
+            Instr::StoreDecimal(x) => [0xF0 | (x & 0x0F), 0x33],
+            Instr::StoreReg(x) => [0xF0 | (x & 0x0F), 0x55],
+            Instr::LoadReg(x) => [0xF0 | (x & 0x0F), 0x65],
         })
         .flatten()
         .collect();
@@ -479,8 +514,6 @@ fn compile(isa: &[Instr]) -> Vec<u8> {
 }
 
 pub fn assemble(source: &str) -> Result<Vec<u8>, CompileError> {
-    let mut bin: Vec<u8> = Vec::new();
-
     let ast = match lex(source) {
         Ok(v) => v,
         Err(e) => return Err(CompileError::LexError(e)),
