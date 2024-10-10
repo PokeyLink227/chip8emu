@@ -162,6 +162,7 @@ impl Chip8 {
                     self.stack_pos -= 1;
                     self.pc = self.stack[self.stack_pos as usize];
                 }
+                0x01 => self.mode = Chip8Mode::Stopped,
                 _ => return Err(Chip8Error::InvalidInstruction),
             },
             // jump addr

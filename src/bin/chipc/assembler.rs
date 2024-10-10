@@ -343,94 +343,94 @@ fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
             [Token::BranchEqual, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfEqualImm(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::BranchEqual, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfEqualReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::BranchNotEqual, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfNotEqualImm(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::BranchNotEqual, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfNotEqualReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Move, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SetImm(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Move, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SetReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::MoveI, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::SetI(*v));
-                ast = &ast[4..];
+                ast = &ast[3..];
             }
             [Token::AddI, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::AddIReg(*r1));
-                ast = &ast[4..];
+                ast = &ast[3..];
             }
             [Token::Add, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::AddImm(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Add, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::AddReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Sub, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SubReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::SubRegNeg, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SetSubReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Or, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::OrReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::And, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::AndReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Xor, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::XorReg(*r1, *r2 as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::ShiftLeft, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::ShiftLeft(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::ShiftRight, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::ShiftRight(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Rand, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::Rand(*r1, *v as u8));
-                ast = &ast[4..];
+                ast = &ast[5..];
             }
             [Token::Draw, Token::Register(r1), Token::Comma, Token::Register(r2), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::Draw(*r1, *r2, *v as u8));
-                ast = &ast[5..];
+                ast = &ast[7..];
             }
             [Token::BranchKeyUp, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::IfKey(*r1));
@@ -508,7 +508,7 @@ fn compile(isa: &[Instr]) -> Vec<u8> {
             Instr::SetI(v) => [0xA0 | (v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
             Instr::JumpReg(v) => [0xB0 | (v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
             Instr::Rand(x, v) => [0xC0 | (x & 0x0F), *v as u8],
-            Instr::Draw(x, y, v) => [0x80 | (x & 0x0F), (y << 4) | (v & 0x000F) as u8],
+            Instr::Draw(x, y, v) => [0xD0 | (x & 0x0F), (y << 4) | (v & 0x000F) as u8],
             Instr::IfKey(x) => [0xE | (x & 0x0F), 0x9E],
             Instr::IfNotKey(x) => [0xE | (x & 0x0F), 0xA1],
             Instr::GetTimer(x) => [0xF0 | (x & 0x0F), 0x07],
@@ -532,13 +532,13 @@ pub fn assemble(source: &str) -> Result<Vec<u8>, CompileError> {
         Ok(v) => v,
         Err(e) => return Err(CompileError::LexError(e)),
     };
-    //println!("ast: {:?}", ast);
+    println!("ast: {:?}", ast);
 
     let isa = match parse(&ast) {
         Ok(v) => v,
         Err(e) => return Err(CompileError::ParseError(e)),
     };
-    //println!("isa: {:?}", isa);
+    println!("isa: {:?}", isa);
 
     Ok(compile(&isa))
 }

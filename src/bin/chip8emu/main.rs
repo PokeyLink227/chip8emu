@@ -1,7 +1,7 @@
 #![allow(unused_variables)]
 extern crate sdl2;
 
-use crate::chip8::{Chip8, Chip8Error};
+use crate::chip8::{Chip8, Chip8Error, Chip8Mode};
 use clap::Parser;
 use sdl2::{event::Event, keyboard::Keycode, keyboard::Scancode, pixels::Color, rect::Rect};
 use std::{fs::File, io::Read, time::Duration};
@@ -11,7 +11,7 @@ mod chip8;
 #[command(version, about, long_about = None)]
 struct Args {
     // Path to Rom to load into emulator
-    #[arg(short, long, value_name = "rom")]
+    #[arg(value_name = "rom")]
     filename: String,
 
     #[arg(short, long, value_name = "real pixels", default_value_t = 15)]
@@ -76,6 +76,7 @@ pub fn main() -> Result<(), String> {
         0x60, 0x90, 0xF0, 0x10, 0x60, // 9
     ];
     emu.load_font(&font_data);
+    emu.mode = Chip8Mode::Running;
 
     'running: loop {
         // reset pressed keys
@@ -134,9 +135,14 @@ pub fn main() -> Result<(), String> {
 
         // clock cpu
         for _ in 0..10 {
-            match emu.clock() {
-                Ok(()) => {}
-                Err(e) => println!("{:?}", e),
+            if emu.mode == Chip8Mode::Running {
+                match emu.clock() {
+                    Ok(()) => {}
+                    Err(e) => {
+                        println!("{:?}", e);
+                        return Ok(());
+                    }
+                }
             }
         }
         emu.signal_new_frame();
