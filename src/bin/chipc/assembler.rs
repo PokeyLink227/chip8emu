@@ -564,7 +564,7 @@ fn parse(mut ast: &[Token]) -> Result<Prog, ParseError> {
 
     Ok(Prog {
         instructions: instr_list,
-        label_map: label_map,
+        label_map,
     })
 }
 
