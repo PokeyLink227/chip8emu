@@ -37,9 +37,11 @@ enum Instr {
     StoreDecimal(u8),
     StoreReg(u8),
     LoadReg(u8),
+    JumpLabel(String),
+    JumpRegLabel(String),
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Token {
     SysCall,
     Clear,
@@ -74,9 +76,17 @@ enum Token {
     Load,
     Register(u8),
     Value(u16),
+    Label(String),
+    Symbol(String),
     //Comment,
     Comma,
     EndLine,
+}
+
+#[derive(Debug)]
+struct Prog {
+    instructions: Vec<Instr>,
+    label_map: Vec<(String, u16)>,
 }
 
 fn parse_hex(input: &str) -> Result<u16, LexError> {
@@ -102,6 +112,7 @@ pub enum LexError {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ParseError {
     MalformedInstruction,
+    UndefinedSymbol,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -145,6 +156,8 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     let r_reg = Regex::new(r"^(V|v)((?<dec>[0-9]{2})|(?<hex>[0-9a-fA-F]))").unwrap();
     let r_val = Regex::new(r"^(?<hex>0x[0-9a-fA-F]+)|^(?<dec>[0-9]+)").unwrap();
     let r_comment = Regex::new(r"^#.?").unwrap();
+    let r_label_def = Regex::new(r"^(?<name>[a-zA-Z][a-zA-Z0-9]*):").unwrap();
+    let r_symbol = Regex::new(r"^(?<name>[a-zA-Z][a-zA-Z0-9]*)").unwrap();
     let r_comma = Regex::new(r"^,").unwrap();
     let r_whitespace = Regex::new(r"^\s+").unwrap();
 
@@ -298,9 +311,17 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
                 line = &line[2..];
             } else if r_comment.is_match(line) {
                 break;
+            } else if r_label_def.is_match(line) {
+                let name: &str = &r_label_def.captures(line).unwrap()["name"];
+                tokens.push(Token::Label(name.to_string()));
+                line = &line[(name.len() + 1)..];
+            } else if r_symbol.is_match(line) {
+                let name: &str = &r_symbol.captures(line).unwrap()["name"];
+                tokens.push(Token::Symbol(name.to_string()));
+                line = &line[name.len()..];
             } else if r_whitespace.is_match(line) {
                 // make skip by number of ws characters found
-                line = &line[1..];
+                line = &line[(r_whitespace.captures(line).unwrap()[0].len())..];
             } else {
                 return Err(LexError::IllegalToken);
             }
@@ -311,178 +332,245 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     Ok(tokens)
 }
 
-fn parse(mut ast: &[Token]) -> Result<Vec<Instr>, ParseError> {
+fn parse(mut ast: &[Token]) -> Result<Prog, ParseError> {
     let mut instr_list: Vec<Instr> = Vec::new();
+    let mut label_map: Vec<(String, u16)> = Vec::new();
+    let mut symbol_list: Vec<String> = Vec::new();
+    let mut address: u16 = 0;
 
     while !ast.is_empty() {
         match ast {
             [Token::SysCall, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::CallMachineCode(*v));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::Clear, Token::EndLine, ..] => {
                 instr_list.push(Instr::ClearScreen);
                 ast = &ast[2..];
+                address += 1;
             }
             [Token::Return, Token::EndLine, ..] => {
                 instr_list.push(Instr::Return);
                 ast = &ast[2..];
+                address += 1;
             }
             [Token::Jump, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::Jump(*v));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::JumpReg, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::JumpReg(*v));
                 ast = &ast[3..];
+                address += 1;
+            }
+            [Token::Jump, Token::Symbol(s), Token::EndLine, ..] => {
+                instr_list.push(Instr::JumpLabel(s.clone()));
+                symbol_list.push(s.clone());
+                ast = &ast[3..];
+                address += 1;
+            }
+            [Token::JumpReg, Token::Symbol(s), Token::EndLine, ..] => {
+                instr_list.push(Instr::JumpRegLabel(s.clone()));
+                symbol_list.push(s.clone());
+                ast = &ast[3..];
+                address += 1;
             }
             [Token::Call, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::Call(*v));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::BranchEqual, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfEqualImm(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::BranchEqual, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfEqualReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::BranchNotEqual, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfNotEqualImm(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::BranchNotEqual, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::IfNotEqualReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Move, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SetImm(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Move, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SetReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::MoveI, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::SetI(*v));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::AddI, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::AddIReg(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::Add, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] => {
                 instr_list.push(Instr::AddImm(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Add, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::AddReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Sub, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SubReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::SubRegNeg, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::SetSubReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Or, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::OrReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::And, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::AndReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Xor, Token::Register(r1), Token::Comma, Token::Register(r2), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::XorReg(*r1, *r2 as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::ShiftLeft, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::ShiftLeft(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::ShiftRight, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::ShiftRight(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Rand, Token::Register(r1), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::Rand(*r1, *v as u8));
                 ast = &ast[5..];
+                address += 1;
             }
             [Token::Draw, Token::Register(r1), Token::Comma, Token::Register(r2), Token::Comma, Token::Value(v), Token::EndLine, ..] =>
             {
                 instr_list.push(Instr::Draw(*r1, *r2, *v as u8));
                 ast = &ast[7..];
+                address += 1;
             }
             [Token::BranchKeyUp, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::IfKey(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::BranchKeyDown, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::IfNotKey(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
 
             [Token::GetTimer, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::GetTimer(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::SetTimer, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::SetTimer(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::SetSound, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::SetSound(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::GetCharAddr, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::SetICharAddr(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::StoreBCD, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::StoreDecimal(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::Store, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::StoreReg(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::Load, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::LoadReg(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::GetKey, Token::Register(r1), Token::EndLine, ..] => {
                 instr_list.push(Instr::GetKey(*r1));
                 ast = &ast[3..];
+                address += 1;
             }
             [Token::EndLine, ..] => ast = &ast[1..],
-            _ => return Err(ParseError::MalformedInstruction),
+            [Token::Label(s), ..] => {
+                label_map.push((s.clone(), address));
+                ast = &ast[1..];
+            }
+            _ => {
+                //println!("{:?}", ast[0]);
+                return Err(ParseError::MalformedInstruction);
+            }
         }
     }
 
-    Ok(instr_list)
+    for s in symbol_list {
+        if label_map.iter().find(|&l| l.0 == *s).is_none() {
+            return Err(ParseError::UndefinedSymbol);
+        }
+    }
+
+    Ok(Prog {
+        instructions: instr_list,
+        label_map: label_map,
+    })
 }
 
-fn compile(isa: &[Instr]) -> Vec<u8> {
+fn compile(isa: &Prog) -> Vec<u8> {
     let bin: Vec<u8> = isa
+        .instructions
         .iter()
         .map(|instr| match instr {
             Instr::CallMachineCode(v) => [(v >> 8) as u8 & 0x0F, (v & 0x00FF) as u8],
@@ -520,6 +608,14 @@ fn compile(isa: &[Instr]) -> Vec<u8> {
             Instr::StoreDecimal(x) => [0xF0 | (x & 0x0F), 0x33],
             Instr::StoreReg(x) => [0xF0 | (x & 0x0F), 0x55],
             Instr::LoadReg(x) => [0xF0 | (x & 0x0F), 0x65],
+            Instr::JumpLabel(s) => {
+                let target = isa.label_map.iter().find(|&x| x.0 == *s).unwrap().1;
+                [0x10 | (target >> 8) as u8 & 0x0F, (target & 0x00FF) as u8]
+            }
+            Instr::JumpRegLabel(s) => {
+                let target = isa.label_map.iter().find(|&x| x.0 == *s).unwrap().1;
+                [0xB0 | (target >> 8) as u8 & 0x0F, (target & 0x00FF) as u8]
+            }
         })
         .flatten()
         .collect();
