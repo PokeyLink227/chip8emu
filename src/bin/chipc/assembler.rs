@@ -527,18 +527,22 @@ fn compile(isa: &[Instr]) -> Vec<u8> {
     bin
 }
 
-pub fn assemble(source: &str) -> Result<Vec<u8>, CompileError> {
+pub fn assemble(source: &str, print_debug: bool) -> Result<Vec<u8>, CompileError> {
     let ast = match lex(source) {
         Ok(v) => v,
         Err(e) => return Err(CompileError::LexError(e)),
     };
-    println!("ast: {:?}", ast);
+    if print_debug {
+        println!("ast: {:?}", ast);
+    }
 
     let isa = match parse(&ast) {
         Ok(v) => v,
         Err(e) => return Err(CompileError::ParseError(e)),
     };
-    println!("isa: {:?}", isa);
+    if print_debug {
+        println!("isa: {:?}", isa);
+    }
 
     Ok(compile(&isa))
 }

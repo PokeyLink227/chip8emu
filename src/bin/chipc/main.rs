@@ -15,6 +15,12 @@ struct Args {
 
     #[arg(short = 'o', long = "out", value_name = "output file", id = "out")]
     destination_file: Option<String>,
+
+    #[arg(short = 's', long = "asm")]
+    is_asm: bool,
+
+    #[arg(short = 'd', long = "debug")]
+    print_debug: bool,
 }
 
 fn main() {
@@ -51,13 +57,25 @@ fn main() {
         }
     };
 
-    let bin = match assemble(&source) {
-        Ok(b) => b,
-        Err(e) => {
-            println!("{:?}", e);
-            return;
-        }
-    };
+    let bin;
+    if args.is_asm {
+        bin = match assemble(&source, args.print_debug) {
+            Ok(b) => b,
+            Err(e) => {
+                println!("{:?}", e);
+                return;
+            }
+        };
+    } else {
+        bin = match assemble(&source, args.print_debug) {
+            Ok(b) => b,
+            Err(e) => {
+                println!("{:?}", e);
+                return;
+            }
+        };
+    }
+
     match output_file.write_all(&bin) {
         Ok(_) => {}
         Err(e) => {
