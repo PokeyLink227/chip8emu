@@ -16,7 +16,7 @@ struct Args {
     #[arg(short = 'o', long = "out", value_name = "output file", id = "out")]
     destination_file: Option<String>,
 
-    #[arg(short = 's', long = "asm")]
+    #[arg(short = 's', long = "asm", default_value = "true")]
     is_asm: bool,
 
     #[arg(short = 'd', long = "debug")]
