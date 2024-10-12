@@ -1,48 +1,6 @@
 use rand::random;
 use std::{fs::File, io::Read};
 
-/*
-#[derive(Debug)]
-enum Instr {
-    CallMachineCode(u16),
-    ClearScreen,
-    Return,
-    Jump(u16),
-    Call(u16),
-    IfEqualImm(u8, u8),
-    IfNotEqualImm(u8, u8),
-    IfEqualReg(u8, u8),
-    SetImm(u8, u8),
-    AddImm(u8, u8),
-    SetReg(u8, u8),
-    OrReg(u8, u8),
-    AndReg(u8, u8),
-    XorReg(u8, u8),
-    AddReg(u8, u8),
-    SubReg(u8, u8),
-    ShiftRight(u8, u8),
-    SetSubReg(u8, u8),
-    ShiftLeft(u8, u8),
-    IfNotEqualReg(u8, u8),
-    SetI(u16),
-    JumpReg(u16),
-    Rand(u8, u8),
-    Draw(u8, u8, u8),
-    IfKey(u8),
-    IfNotKey(u8),
-    GetTimer(u8),
-    GetKey(u8),
-    SetTimer(u8),
-    SetSound(u8),
-    AddIReg(u8),
-    SetICharAddr(u8),
-    StoreDecimal(u8),
-    StoreReg(u8),
-    LoadReg(u8),
-    Error,
-}
-*/
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Chip8Error {
     InvalidInstruction,
@@ -97,7 +55,9 @@ impl Chip8 {
     }
 
     pub fn clock(&mut self) -> Result<(), Chip8Error> {
+        //print!("{}: ", self.pc);
         let instr = self.fetch_instr()?;
+        //println!("{}", instr);
         self.execute_instr(instr)
     }
 

@@ -160,173 +160,176 @@ fn lex(source: &str) -> Result<Vec<Token>, LexError> {
     let r_symbol = Regex::new(r"^(?<name>[a-zA-Z][a-zA-Z0-9]*)").unwrap();
     let r_comma = Regex::new(r"^,").unwrap();
     let r_whitespace = Regex::new(r"^\s+").unwrap();
+    let r_newline = Regex::new(r"^\r?\n").unwrap();
+
+    let mut line = source;
 
     let mut tokens: Vec<Token> = Vec::new();
 
-    for (_line_number, mut line) in source.lines().enumerate() {
-        while !line.is_empty() {
-            if r_val.is_match(line) {
-                let caps = r_val.captures(line).unwrap();
-                let val: u16;
-                if let Some(dec) = caps.name("dec") {
-                    match dec.as_str().parse::<u16>() {
-                        Ok(num) => {
-                            if num & 0xF000 != 0x0000 {
-                                return Err(LexError::NumberTooWide);
-                            }
-                            val = num;
+    while !line.is_empty() {
+        if r_val.is_match(line) {
+            let caps = r_val.captures(line).unwrap();
+            let val: u16;
+            if let Some(dec) = caps.name("dec") {
+                match dec.as_str().parse::<u16>() {
+                    Ok(num) => {
+                        if num & 0xF000 != 0x0000 {
+                            return Err(LexError::NumberTooWide);
                         }
-                        Err(_) => return Err(LexError::NumberTooWide),
+                        val = num;
                     }
-                    tokens.push(Token::Value(val));
-                    line = &line[dec.len()..];
-                } else if let Some(hex) = caps.name("hex") {
-                    val = parse_hex(&hex.as_str()[2..])?;
-                    if val & 0xF000 != 0x0000 {
-                        return Err(LexError::NumberTooWide);
-                    }
+                    Err(_) => return Err(LexError::NumberTooWide),
+                }
+                tokens.push(Token::Value(val));
+                line = &line[dec.len()..];
+            } else if let Some(hex) = caps.name("hex") {
+                val = parse_hex(&hex.as_str()[2..])?;
+                if val & 0xF000 != 0x0000 {
+                    return Err(LexError::NumberTooWide);
+                }
 
-                    tokens.push(Token::Value(val));
-                    line = &line[hex.len()..];
-                } else {
-                    return Err(LexError::IllegalToken);
-                }
-            } else if r_reg.is_match(line) {
-                let caps = r_reg.captures(line).unwrap();
-                let val: u8;
-                if let Some(dec) = caps.name("dec") {
-                    match dec.as_str().parse::<u8>() {
-                        Ok(num) => {
-                            if num & 0xF0 != 0x00 {
-                                return Err(LexError::NumberTooWide);
-                            }
-                            val = num;
-                        }
-                        Err(_) => return Err(LexError::NumberTooWide),
-                    }
-                    tokens.push(Token::Register(val));
-                    line = &line[(dec.len() + 1)..];
-                } else if let Some(hex) = caps.name("hex") {
-                    val = parse_hex(&hex.as_str())? as u8;
-                    tokens.push(Token::Register(val));
-                    line = &line[(hex.len() + 1)..];
-                } else {
-                    return Err(LexError::IllegalToken);
-                }
-            } else if r_rand.is_match(line) {
-                tokens.push(Token::Rand);
-                line = &line[5..];
-            } else if r_draw.is_match(line) {
-                tokens.push(Token::Draw);
-                line = &line[5..];
-            } else if r_sbcd.is_match(line) {
-                tokens.push(Token::StoreBCD);
-                line = &line[5..];
-            } else if r_call.is_match(line) {
-                tokens.push(Token::Call);
-                line = &line[5..];
-            } else if r_subn.is_match(line) {
-                tokens.push(Token::SubRegNeg);
-                line = &line[5..];
-            } else if r_sys.is_match(line) {
-                tokens.push(Token::SysCall);
-                line = &line[4..];
-            } else if r_bkd.is_match(line) {
-                tokens.push(Token::BranchKeyDown);
-                line = &line[4..];
-            } else if r_bku.is_match(line) {
-                tokens.push(Token::BranchKeyUp);
-                line = &line[4..];
-            } else if r_gkd.is_match(line) {
-                tokens.push(Token::GetKey);
-                line = &line[4..]
-            } else if r_gdt.is_match(line) {
-                tokens.push(Token::GetTimer);
-                line = &line[4..];
-            } else if r_sdt.is_match(line) {
-                tokens.push(Token::SetTimer);
-                line = &line[4..];
-            } else if r_sst.is_match(line) {
-                tokens.push(Token::SetSound);
-                line = &line[4..];
-            } else if r_gca.is_match(line) {
-                tokens.push(Token::GetCharAddr);
-                line = &line[4..];
-            } else if r_clr.is_match(line) {
-                tokens.push(Token::Clear);
-                line = &line[4..];
-            } else if r_ret.is_match(line) {
-                tokens.push(Token::Return);
-                line = &line[4..];
-            } else if r_bne.is_match(line) {
-                tokens.push(Token::BranchNotEqual);
-                line = &line[4..];
-            } else if r_mov.is_match(line) {
-                tokens.push(Token::Move);
-                line = &line[4..];
-            } else if r_movi.is_match(line) {
-                tokens.push(Token::MoveI);
-                line = &line[4..];
-            } else if r_addi.is_match(line) {
-                tokens.push(Token::AddI);
-                line = &line[4..];
-            } else if r_add.is_match(line) {
-                tokens.push(Token::Add);
-                line = &line[4..];
-            } else if r_sub.is_match(line) {
-                tokens.push(Token::Sub);
-                line = &line[4..];
-            } else if r_xor.is_match(line) {
-                tokens.push(Token::Xor);
-                line = &line[4..];
-            } else if r_and.is_match(line) {
-                tokens.push(Token::And);
-                line = &line[4..];
-            } else if r_or.is_match(line) {
-                tokens.push(Token::Or);
-                line = &line[3..];
-            } else if r_be.is_match(line) {
-                tokens.push(Token::BranchEqual);
-                line = &line[3..];
-            } else if r_sr.is_match(line) {
-                tokens.push(Token::ShiftRight);
-                line = &line[3..];
-            } else if r_sl.is_match(line) {
-                tokens.push(Token::ShiftLeft);
-                line = &line[3..];
-            } else if r_jr.is_match(line) {
-                tokens.push(Token::JumpReg);
-                line = &line[3..];
-            } else if r_sb.is_match(line) {
-                tokens.push(Token::Store);
-                line = &line[3..];
-            } else if r_lb.is_match(line) {
-                tokens.push(Token::Load);
-                line = &line[3..];
-            } else if r_j.is_match(line) {
-                tokens.push(Token::Jump);
-                line = &line[2..];
-            } else if r_comma.is_match(line) {
-                tokens.push(Token::Comma);
-                line = &line[2..];
-            } else if r_comment.is_match(line) {
-                break;
-            } else if r_label_def.is_match(line) {
-                let name: &str = &r_label_def.captures(line).unwrap()["name"];
-                tokens.push(Token::Label(name.to_string()));
-                line = &line[(name.len() + 1)..];
-            } else if r_symbol.is_match(line) {
-                let name: &str = &r_symbol.captures(line).unwrap()["name"];
-                tokens.push(Token::Symbol(name.to_string()));
-                line = &line[name.len()..];
-            } else if r_whitespace.is_match(line) {
-                // make skip by number of ws characters found
-                line = &line[(r_whitespace.captures(line).unwrap()[0].len())..];
+                tokens.push(Token::Value(val));
+                line = &line[hex.len()..];
             } else {
                 return Err(LexError::IllegalToken);
             }
+        } else if r_reg.is_match(line) {
+            let caps = r_reg.captures(line).unwrap();
+            let val: u8;
+            if let Some(dec) = caps.name("dec") {
+                match dec.as_str().parse::<u8>() {
+                    Ok(num) => {
+                        if num & 0xF0 != 0x00 {
+                            return Err(LexError::NumberTooWide);
+                        }
+                        val = num;
+                    }
+                    Err(_) => return Err(LexError::NumberTooWide),
+                }
+                tokens.push(Token::Register(val));
+                line = &line[(dec.len() + 1)..];
+            } else if let Some(hex) = caps.name("hex") {
+                val = parse_hex(&hex.as_str())? as u8;
+                tokens.push(Token::Register(val));
+                line = &line[(hex.len() + 1)..];
+            } else {
+                return Err(LexError::IllegalToken);
+            }
+        } else if r_rand.is_match(line) {
+            tokens.push(Token::Rand);
+            line = &line[5..];
+        } else if r_draw.is_match(line) {
+            tokens.push(Token::Draw);
+            line = &line[5..];
+        } else if r_sbcd.is_match(line) {
+            tokens.push(Token::StoreBCD);
+            line = &line[5..];
+        } else if r_call.is_match(line) {
+            tokens.push(Token::Call);
+            line = &line[5..];
+        } else if r_subn.is_match(line) {
+            tokens.push(Token::SubRegNeg);
+            line = &line[5..];
+        } else if r_sys.is_match(line) {
+            tokens.push(Token::SysCall);
+            line = &line[4..];
+        } else if r_bkd.is_match(line) {
+            tokens.push(Token::BranchKeyDown);
+            line = &line[4..];
+        } else if r_bku.is_match(line) {
+            tokens.push(Token::BranchKeyUp);
+            line = &line[4..];
+        } else if r_gkd.is_match(line) {
+            tokens.push(Token::GetKey);
+            line = &line[4..]
+        } else if r_gdt.is_match(line) {
+            tokens.push(Token::GetTimer);
+            line = &line[4..];
+        } else if r_sdt.is_match(line) {
+            tokens.push(Token::SetTimer);
+            line = &line[4..];
+        } else if r_sst.is_match(line) {
+            tokens.push(Token::SetSound);
+            line = &line[4..];
+        } else if r_gca.is_match(line) {
+            tokens.push(Token::GetCharAddr);
+            line = &line[4..];
+        } else if r_clr.is_match(line) {
+            tokens.push(Token::Clear);
+            line = &line[4..];
+        } else if r_ret.is_match(line) {
+            tokens.push(Token::Return);
+            line = &line[4..];
+        } else if r_bne.is_match(line) {
+            tokens.push(Token::BranchNotEqual);
+            line = &line[4..];
+        } else if r_mov.is_match(line) {
+            tokens.push(Token::Move);
+            line = &line[4..];
+        } else if r_movi.is_match(line) {
+            tokens.push(Token::MoveI);
+            line = &line[4..];
+        } else if r_addi.is_match(line) {
+            tokens.push(Token::AddI);
+            line = &line[4..];
+        } else if r_add.is_match(line) {
+            tokens.push(Token::Add);
+            line = &line[4..];
+        } else if r_sub.is_match(line) {
+            tokens.push(Token::Sub);
+            line = &line[4..];
+        } else if r_xor.is_match(line) {
+            tokens.push(Token::Xor);
+            line = &line[4..];
+        } else if r_and.is_match(line) {
+            tokens.push(Token::And);
+            line = &line[4..];
+        } else if r_or.is_match(line) {
+            tokens.push(Token::Or);
+            line = &line[3..];
+        } else if r_be.is_match(line) {
+            tokens.push(Token::BranchEqual);
+            line = &line[3..];
+        } else if r_sr.is_match(line) {
+            tokens.push(Token::ShiftRight);
+            line = &line[3..];
+        } else if r_sl.is_match(line) {
+            tokens.push(Token::ShiftLeft);
+            line = &line[3..];
+        } else if r_jr.is_match(line) {
+            tokens.push(Token::JumpReg);
+            line = &line[3..];
+        } else if r_sb.is_match(line) {
+            tokens.push(Token::Store);
+            line = &line[3..];
+        } else if r_lb.is_match(line) {
+            tokens.push(Token::Load);
+            line = &line[3..];
+        } else if r_j.is_match(line) {
+            tokens.push(Token::Jump);
+            line = &line[2..];
+        } else if r_comma.is_match(line) {
+            tokens.push(Token::Comma);
+            line = &line[2..];
+        } else if r_comment.is_match(line) {
+            break;
+        } else if r_label_def.is_match(line) {
+            let name: &str = &r_label_def.captures(line).unwrap()["name"];
+            tokens.push(Token::Label(name.to_string()));
+            line = &line[(name.len() + 1)..];
+        } else if r_symbol.is_match(line) {
+            let name: &str = &r_symbol.captures(line).unwrap()["name"];
+            tokens.push(Token::Symbol(name.to_string()));
+            line = &line[name.len()..];
+        } else if r_newline.is_match(line) {
+            tokens.push(Token::EndLine);
+            line = &line[(r_newline.captures(line).unwrap()[0].len())..];
+        } else if r_whitespace.is_match(line) {
+            // make skip by number of ws characters found
+            line = &line[(r_whitespace.captures(line).unwrap()[0].len())..];
+        } else {
+            return Err(LexError::IllegalToken);
         }
-        tokens.push(Token::EndLine);
     }
 
     Ok(tokens)
@@ -609,11 +612,11 @@ fn compile(isa: &Prog) -> Vec<u8> {
             Instr::StoreReg(x) => [0xF0 | (x & 0x0F), 0x55],
             Instr::LoadReg(x) => [0xF0 | (x & 0x0F), 0x65],
             Instr::JumpLabel(s) => {
-                let target = isa.label_map.iter().find(|&x| x.0 == *s).unwrap().1;
+                let target = isa.label_map.iter().find(|&x| x.0 == *s).unwrap().1 * 2 + 0x200;
                 [0x10 | (target >> 8) as u8 & 0x0F, (target & 0x00FF) as u8]
             }
             Instr::JumpRegLabel(s) => {
-                let target = isa.label_map.iter().find(|&x| x.0 == *s).unwrap().1;
+                let target = isa.label_map.iter().find(|&x| x.0 == *s).unwrap().1 * 2 + 0x200;
                 [0xB0 | (target >> 8) as u8 & 0x0F, (target & 0x00FF) as u8]
             }
         })
